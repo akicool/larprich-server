@@ -1,0 +1,11 @@
+services:
+  coturn:
+    image: coturn/coturn:latest
+    # Simplest option for a local dev TURN relay: the container needs to bind
+    # a wide UDP port range for media relay, which is far more fiddly to
+    # publish individually than to just share the host network.
+    network_mode: host
+    volumes:
+      - ./docker/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf", "-v"]
+    restart: unless-stopped

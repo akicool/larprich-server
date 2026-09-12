@@ -1,0 +1,54 @@
+# Production stack, deployed through Dokploy: the app + coturn (TURN/STUN relay).
+#
+# TLS and routing are NOT in this file — Dokploy's Traefik terminates HTTPS and
+# injects its own routing labels from the service's Domains tab at deploy time.
+# That's also why there is no Caddy here: Dokploy's Traefik already owns 80/443.
+#
+# Environment variables come from the Dokploy service's Environment tab, which
+# Dokploy writes to an .env file next to this compose file before running
+# `docker compose up -d --build` — that is what resolves every ${...} below.
+
+services:
+  app:
+    build: .
+    image: larprich-signaling-server:latest
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - SEARCH_TIMEOUT_MS=${SEARCH_TIMEOUT_MS}
+      - HEARTBEAT_INTERVAL_MS=${HEARTBEAT_INTERVAL_MS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - STUN_URLS=${STUN_URLS}
+      - TURN_URLS=${TURN_URLS}
+      - TURN_SHARED_SECRET=${TURN_SHARED_SECRET}
+      - TURN_CREDENTIAL_TTL_SECONDS=${TURN_CREDENTIAL_TTL_SECONDS}
+    expose:
+      - '3001'
+    # Traefik only routes to containers it shares a network with, and it watches
+    # exactly this one (`providers.docker.network: dokploy-network`).
+    networks:
+      - dokploy-network
+
+  coturn:
+    image: coturn/coturn:latest
+    # coturn needs a wide UDP port range for media relay, which is far simpler to
+    # expose via host networking than to publish port-by-port. It is deliberately
+    # NOT on dokploy-network and has no domain: Traefik must not proxy it.
+    network_mode: host
+    volumes:
+      - ./docker/coturn/turnserver.prod.conf:/etc/coturn/turnserver.conf:ro
+    # realm/static-auth-secret are injected here (not baked into the conf file)
+    # so the secret never has to be committed to the repo.
+    command:
+      - '-c'
+      - '/etc/coturn/turnserver.conf'
+      - '--realm=${DOMAIN_NAME}'
+      - '--static-auth-secret=${TURN_SHARED_SECRET}'
+      - '-v'
+    restart: unless-stopped
+
+networks:
+  dokploy-network:
+    external: true
