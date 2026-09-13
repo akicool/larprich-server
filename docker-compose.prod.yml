@@ -13,17 +13,22 @@ services:
     build: .
     image: larprich-signaling-server:latest
     restart: unless-stopped
+    # Everything here has a working default, so a deploy cannot silently come up
+    # with blank config. The only value that MUST be supplied is the TURN secret,
+    # and it fails the deploy loudly if missing rather than booting broken.
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - CORS_ORIGIN=${CORS_ORIGIN}
-      - SEARCH_TIMEOUT_MS=${SEARCH_TIMEOUT_MS}
-      - HEARTBEAT_INTERVAL_MS=${HEARTBEAT_INTERVAL_MS}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - STUN_URLS=${STUN_URLS}
-      - TURN_URLS=${TURN_URLS}
-      - TURN_SHARED_SECRET=${TURN_SHARED_SECRET}
-      - TURN_CREDENTIAL_TTL_SECONDS=${TURN_CREDENTIAL_TTL_SECONDS}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - SEARCH_TIMEOUT_MS=${SEARCH_TIMEOUT_MS:-50000}
+      - HEARTBEAT_INTERVAL_MS=${HEARTBEAT_INTERVAL_MS:-15000}
+      - LOG_LEVEL=${LOG_LEVEL:-log}
+      # Derived from the domain rather than duplicated: these can't drift out of
+      # sync with DOMAIN_NAME or with what coturn is actually serving.
+      - STUN_URLS=stun:stun.l.google.com:19302,stun:${DOMAIN_NAME:-larprich.serkilov.com}:3478
+      - TURN_URLS=turn:${DOMAIN_NAME:-larprich.serkilov.com}:3478?transport=udp,turn:${DOMAIN_NAME:-larprich.serkilov.com}:3478?transport=tcp
+      - TURN_SHARED_SECRET=${TURN_SHARED_SECRET:?set TURN_SHARED_SECRET in the Dokploy Environment tab}
+      - TURN_CREDENTIAL_TTL_SECONDS=${TURN_CREDENTIAL_TTL_SECONDS:-3600}
     expose:
       - '3001'
     # Traefik only routes to containers it shares a network with, and it watches
@@ -44,8 +49,8 @@ services:
     command:
       - '-c'
       - '/etc/coturn/turnserver.conf'
-      - '--realm=${DOMAIN_NAME}'
-      - '--static-auth-secret=${TURN_SHARED_SECRET}'
+      - '--realm=${DOMAIN_NAME:-larprich.serkilov.com}'
+      - '--static-auth-secret=${TURN_SHARED_SECRET:?set TURN_SHARED_SECRET in the Dokploy Environment tab}'
       - '-v'
     restart: unless-stopped
 
